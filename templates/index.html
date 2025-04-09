@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Student Mental Health Assessment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Student Mental Health Assessment</h4>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    This questionnaire will help assess factors related to your academic stress level. 
+                    All responses are confidential and processed locally in your browser.
+                </p>
+                
+                <div class="alert alert-info">
+                    <strong>Note:</strong> This is not a diagnostic tool. It is designed to identify potential stress factors 
+                    in your academic life and provide general recommendations.
+                </div>
+
+                <form id="mental-health-form">
+                    <div id="questionnaire-container">
+                        {% for field in questionnaire %}
+                        <div class="form-group">
+                            <label for="{{ field.id }}">{{ field.label }}{% if field.required %} *{% endif %}</label>
+                            
+                            {% if field.type == "number" %}
+                            <input type="number" class="form-control" id="{{ field.id }}" name="{{ field.id }}" 
+                                   {% if field.min is defined %}min="{{ field.min }}"{% endif %}
+                                   {% if field.max is defined %}max="{{ field.max }}"{% endif %}
+                                   {% if field.step is defined %}step="{{ field.step }}"{% endif %}
+                                   {% if field.required %}required{% endif %}>
+                            
+                            {% elif field.type == "select" %}
+                            <select class="form-control" id="{{ field.id }}" name="{{ field.id }}" {% if field.required %}required{% endif %}>
+                                <option value="" disabled selected>Select an option</option>
+                                {% for option in field.options %}
+                                <option value="{{ option }}">{{ option }}</option>
+                                {% endfor %}
+                            </select>
+                            
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg px-5">Submit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Results section (hidden initially) -->
+        <div id="results-container" class="card shadow mt-4" style="display: none;">
+            <div class="card-header bg-info text-white">
+                <h4 class="mb-0">Assessment Results</h4>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    <h5>Your Academic Stress Level:</h5>
+                    <div id="risk-gauge" class="my-3">
+                        <div class="progress" style="height: 30px;">
+                            <div id="risk-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <h3 id="risk-level" class="mb-3"></h3>
+                </div>
+                
+                <div id="results-message" class="alert alert-secondary"></div>
+                
+                <div id="recommendations-container" class="mt-4">
+                    <h5>Recommendations:</h5>
+                    <ul id="recommendations-list" class="list-group list-group-flush">
+                        <!-- Recommendations will be inserted here -->
+                    </ul>
+                </div>
+                
+                <div class="alert alert-warning mt-4">
+                    <strong>Disclaimer:</strong> This assessment is not a clinical diagnosis. If you're experiencing mental health challenges,
+                    please consult with your university's counseling center or a qualified mental health professional.
+                </div>
+                
+                <div class="text-center mt-3">
+                    <button id="reset-btn" class="btn btn-secondary">Start Over</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- About section -->
+        <div id="about" class="card shadow mt-4">
+            <div class="card-header bg-secondary text-white">
+                <h4 class="mb-0">About This Tool</h4>
+            </div>
+            <div class="card-body">
+                <p>
+                    This tool uses a machine learning model trained on student mental health survey data to identify 
+                    potential stress factors in academic environments.
+                </p>
+                <p>
+                    The model analyzes various factors including academic load, sleep quality, social support, 
+                    and personal habits to provide an assessment of potential stress levels and recommendations.
+                </p>
+                <p>
+                    <strong>Important:</strong> All data processing happens locally in your browser. No personal 
+                    information is collected or stored on any server.
+                </p>
+            </div>
+        </div>
+        
+        <!-- Resources section -->
+        <div id="resources" class="card shadow mt-4 mb-5">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0">Student Mental Health Resources</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Campus Resources</h5>
+                        <ul class="list-unstyled">
+                            <li><strong>University Counseling Center:</strong> Most universities offer free or low-cost counseling services</li>
+                            <li><strong>Student Health Services:</strong> For both physical and mental health support</li>
+                            <li><strong>Academic Advisors:</strong> Can help manage academic stress and workload</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        const form = $('#mental-health-form');
+        const questionnaire = $('#questionnaire-container');
+        const resultsContainer = $('#results-container');
+        const riskBar = $('#risk-bar');
+        const riskLevel = $('#risk-level');
+        const resultsMessage = $('#results-message');
+        const recommendationsList = $('#recommendations-list');
+        const resetBtn = $('#reset-btn');
+        
+        // Handle form submission
+        form.on('submit', function(e) {
+            e.preventDefault();
+            
+            // Show loading state
+            $('button[type="submit"]').prop('disabled', true).html(
+                '<span class="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></span>Loading...'
+            );
+            
+            // Collect form data
+            const formData = new FormData(form[0]);
+            
+            // Send to server
+            $.ajax({
+                url: '/predict',
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    // Display results
+                    displayResults(response);
+                    
+                    // Scroll to results
+                    $('html, body').animate({
+                        scrollTop: resultsContainer.offset().top - 20
+                    }, 500);
+                },
+                error: function(error) {
+                    alert('An error occurred. Please try again.');
+                    console.error('Error:', error);
+                },
+                complete: function() {
+                    // Reset button state
+                    $('button[type="submit"]').prop('disabled', false).text('Submit');
+                }
+            });
+        });
+        
+        // Display results function
+        function displayResults(results) {
+            // Show results container
+            resultsContainer.show();
+            
+            // Update risk gauge
+            const stressPercent = results.stress_probability * 100;
+            riskBar.css('width', stressPercent + '%');
+            
+            // Set color based on stress level
+            if (results.stress_level === 'Low') {
+                riskBar.removeClass('bg-warning bg-danger').addClass('bg-success');
+            } else {
+                riskBar.removeClass('bg-success bg-warning').addClass('bg-danger');
+            }
+            
+            // Update risk level text
+            riskLevel.text(results.stress_level + ' Stress Level (' + stressPercent.toFixed(1) + '%)');
+            
+            // Set message
+            resultsMessage.text(results.message);
+            
+            // Set alert class based on risk level
+            resultsMessage.removeClass('alert-success alert-warning alert-danger');
+            if (results.stress_level === 'Low') {
+                resultsMessage.addClass('alert-success');
+            } else {
+                resultsMessage.addClass('alert-danger');
+            }
+            
+            // Clear and add recommendations
+            recommendationsList.empty();
+            results.recommendations.forEach(function(rec) {
+                recommendationsList.append('<li class="list-group-item">' + rec + '</li>');
+            });
+        }
+        
+        // Reset button
+        resetBtn.on('click', function() {
+            // Reset form
+            form[0].reset();
+            
+            // Hide results
+            resultsContainer.hide();
+            
+            // Scroll to top of form
+            $('html, body').animate({
+                scrollTop: form.offset().top - 20
+            }, 500);
+        });
+    });
+</script>
+{% endblock %} 
